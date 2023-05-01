@@ -1,7 +1,6 @@
 library(tidyverse)
 library(lme4)
 library(AICcmodavg)
-library(viridis)
 
 dat <- read.csv("2021 Bycatch shmw analysis.csv") %>% 
   mutate(Color = as.factor(Color),
