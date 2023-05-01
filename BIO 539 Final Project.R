@@ -2,7 +2,7 @@ library(tidyverse)
 library(lme4)
 library(AICcmodavg)
 
-dat <- read.csv("2021 Bycatch shmw analysis.csv") %>% 
+dat <- read.csv("2021_SHMW.csv") %>% 
   mutate(Color = as.factor(Color),
          Season = factor(Season, levels = c("Summer", "Fall", "Winter", "Spring")), 
          Depth = Depth * 1.8288, ## Convert fathoms to meters
@@ -10,7 +10,7 @@ dat <- read.csv("2021 Bycatch shmw analysis.csv") %>%
            Color == "White" ~ "White",
            Color != "White" ~ "Discolored"))%>%
   filter(!is.na(Meat_Weight)) ## Filter any cases where there is no mw data
-stat <- read.csv("Stations.csv")
+stat <- read.csv("2021_Stations.csv")
 dat <- left_join(dat, stat, by = "Station") %>% 
   mutate(Depth2 = as.numeric(scale(log(Depth))),
          shell = as.numeric(scale(log(Shell_Height))),
