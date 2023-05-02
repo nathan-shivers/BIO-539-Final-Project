@@ -31,8 +31,7 @@ summary(lm(Meat_Weight ~ Shell_Height, data = dat))
 ggplot(dat, aes(x = factor(Season, levels = c("Summer", "Fall", "Winter", "Spring")), y = Meat_Weight)) +
   geom_boxplot() +
   theme_bw() +
-  labs(y = "Meat Weight (g)", x = "Season") +
-  facet_wrap(~shells)
+  labs(y = "Meat Weight (g)", x = "Season")
 # Shapiro test to see if meat weight is normal
 shapiro.test(dat$Meat_Weight) # It is not so non-parametric tests need to be used
 # Test the difference of meat weight between the seasons 
@@ -113,9 +112,12 @@ Model_names <- c("Shell Height", "Depth", "Season", "Color", "Lat",
                  "Shell Height + Season + Lat + Color",
                  "Shell Height + Season + Depth + Color + Lat")
 ## Model selection table using AIC for all models created
-aictab(cand.set = fits, modnames = Model_names, sort = TRUE)
+aictab(cand.set = fits, modnames = Model_names, sort = TRUE, second.ord = FALSE)
 ## Testing residuals of selected model and they look fine
 plot(fits[[16]])
+
+## Model summary for final model
+summary(fits[[16]])
 
 ## Creation of new data to get model output of Meat Weight
 newdat <- crossing(Shell = seq(40, 160, 10),
