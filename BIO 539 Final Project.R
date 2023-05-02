@@ -114,6 +114,8 @@ Model_names <- c("Shell Height", "Depth", "Season", "Color", "Lat",
                  "Shell Height + Season + Depth + Color + Lat")
 ## Model selection table using AIC for all models created
 aictab(cand.set = fits, modnames = Model_names, sort = TRUE)
+## Testing residuals of selected model and they look fine
+plot(fits[[16]])
 
 ## Creation of new data to get model output of Meat Weight
 newdat <- crossing(Shell = seq(40, 160, 10),
