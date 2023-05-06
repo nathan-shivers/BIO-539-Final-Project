@@ -1,0 +1,171 @@
+---
+title: "Bio 539 Final Project"
+author: "Nathan Shivers"
+date: "2023-05-02"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+library(AICcmodavg)
+library(viridis)
+library(kableExtra)
+dat <- read.csv("2021_SHMW.csv") %>% 
+  mutate(Color = as.factor(Color),
+         Season = factor(Season, levels = c("Summer", "Fall", "Winter", "Spring")), 
+         Depth = Depth * 1.8288, # Convert fathoms to meters
+         Color = case_when(
+           Color == "White" ~ "White", # Small number of grey meats so combine them with brown
+           Color != "White" ~ "Discolored"))%>%
+  filter(!is.na(Meat_Weight)) 
+stat <- read.csv("2021_Stations.csv")
+# Log transforms and scales all continuous variables for ease of fitting GLMMs
+dat <- left_join(dat, stat, by = "Station") %>% 
+  mutate(Depth2 = as.numeric(scale(log(Depth))),
+         shell = as.numeric(scale(log(Shell_Height))),
+         Lat2 = as.numeric(scale(log(Lat))))
+
+## Create a list of GLMMs with a wide variety of different parameters for SHMW
+# All models use a poisson with log link due to increase in meat weight variance as
+# meat weight increases. Station is treated as a random intercept to account for 
+# non-random sampling and for scallops at the same station to be more similar
+
+fits <- list() 
+
+fits[[1]] <- glmer((Meat_Weight ~ shell + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[2]] <- glmer((Meat_Weight ~ Depth2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[3]] <- glmer((Meat_Weight ~ Season + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[4]] <- glmer((Meat_Weight ~ Color + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[5]] <- glmer((Meat_Weight ~ Lat2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[6]] <- glmer((Meat_Weight ~ shell + Season + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[7]] <- glmer((Meat_Weight ~ shell + Depth2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[8]] <- glmer((Meat_Weight ~ shell + Color + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[9]] <- glmer((Meat_Weight ~ shell + Lat2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[10]] <- glmer((Meat_Weight ~ shell + Season + Depth2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[11]] <- glmer((Meat_Weight ~ shell + Season + Color + (1|Station)),
+                    family = poisson(link = "log"), data = dat)
+fits[[12]] <- glmer((Meat_Weight ~ shell + Season + Lat2 + (1|Station)),
+                   family = poisson(link = "log"), data = dat)
+fits[[13]] <- glmer((Meat_Weight ~ shell + Season + Depth2 + Color 
+                     + (1|Station)),
+                    family = poisson(link = "log"), data = dat)
+fits[[14]] <- glmer((Meat_Weight ~ shell + Season + Depth2 + Lat2 
+                     + (1|Station)),
+                    family = poisson(link = "log"), data = dat)
+fits[[15]] <- glmer((Meat_Weight ~ shell + Season + Lat2 + Color 
+                     + (1|Station)),
+                    family = poisson(link = "log"), data = dat)
+fits[[16]] <- glmer((Meat_Weight ~ shell + Season + Depth2 + Color 
+                     + Lat2 + (1|Station)),
+                    family = poisson(link = "log"), data = dat)
+
+Model_names <- c("Shell Height", "Depth", "Season", "Color", "Lat",
+                 "Shell Height + Season", "Shell Height + Depth", 
+                 "Shell Height + Color", "Shell Height + Lat",
+                 "Shell Height + Season + Depth",
+                 "Shell Height + Season + Color",
+                 "Shell Height + Season + Lat",
+                 "Shell Height + Season + Depth + Color",
+                 "Shell Height + Season + Depth + Lat",
+                 "Shell Height + Season + Lat + Color",
+                 "Shell Height + Season + Depth + Color + Lat")
+
+## Creation of new data to get model output of Meat Weight
+newdat <- crossing(Shell = seq(40, 160, 10),
+                   Season = factor(c("Summer", "Fall", "Winter", "Spring"),
+                                      levels = c("Summer", "Fall", "Winter", "Spring")),
+                   Station = c(704, 734, 730),
+                   Color = as.factor(c("White", "Discolored"))) %>% 
+  left_join(stat, by = "Station") %>% 
+  mutate(Depth = case_when(
+    Station == 704 ~ 90,
+    Station == 734 ~ 90, 
+    Station == 730 ~ 60), # Rescales the new data to the original data
+    Lat2 = as.numeric(scale(log(Lat), center = mean(log(dat$Lat)),
+                            scale = sd(log(dat$Lat)))),
+    shell = as.numeric(scale(log(Shell), center = mean(log(dat$Shell_Height)),
+                             scale = sd(log(dat$Shell_Height)))),
+    Depth2 = as.numeric(scale(log(Depth), center = mean(log(dat$Depth)),
+                              scale = sd(log(dat$Depth)))))
+## Model predictions of Meat Weight from model 16 with new generated data
+newdat$MW <- predict(fits[[16]], newdata = newdat) 
+newdat$MW <- exp(newdat$MW) # Have to exp to transform it from log form
+```
+
+
+## Methods
+
+Atlantic sea scallops (Placopecten magellanicus) were collected at 50 stations throughout George’s Bank during four seasonal research surveys. Up to 30 individual sea scallops from each station were randomly selected to record their shell height, meat weight, and meat color. Meat color was originally recorded as white, brown, or grey but due to low number of grey meats both brown and grey were combined as discolored. Additional tow information such as depth, latitude, and season were recorded as well. Preliminary data analysis was conducted on each variable independently to explore their relationship with meat weight. Shell height, depth, and latitude were loge transformed and centered to ease in model creation. The R package lme4 was used to create Multiple GLMMs to predict scallop meat weight using a variety of variables. All the GLMMs used a Poisson error family along with a log link since the variance for meat weight increased as shell height increased. Plus, each GLMMs has a random effect for the slope as station since scallops collected at a station will be more similar than at other stations. The final model was then selected by using Akaike’s information criterion. 
+
+
+## Results
+
+There was a total of 4676 scallops sampled throughout all the surveys. Shell height ranged from 66m to 170mm and a mean height of 119m±15. A simple linear regression had shell height as a significant predictor, p-value of < 2.2x10-16, with an estimated value of 0.64. The model also had an R2 value of 75.9% which means that shell height explains a lot of the variation seen with meat weight. Figure 1 shows the relationship between shell height and meat weight with the simple linear regression overlayed. Of the 4676 scallops there were 28 scallops that had discolored meats and the rest had normal white meats. Figure 2 shows the mean meat weight for white scallops (32.3g±11.6) and for discolored scallops (27.2g±11.2). Meat weight was first tested for normality by visual inspection and then a Shapiro-Wilk test was performed with a p-value, < 2.2x10-16, determining that it does not follow a normal distribution. A Wilcox test was then run to test if there was a significant difference between the two groups and it determined that there was with a p-value of 0.00342. Each research survey was conducted during a different season with figure 3 showing the mean meat weight for each season. Fall and winter had the smallest mean meat weight with 24.3g±9.49 and 24.9±10.8 respectfully. While Summer and spring both had higher overall mean meat weights of 29.7g±12.1 and 28.5g ± 10.9. A Kruskal-Wallis test, p-value of <2.2x10-16, showed that there is a significant difference in meat weight between the four seasons. The depth range of the stations ranged from 54m to 96m with a mean depth of 73m±11.65. Figure 4 shows the mean meat weight related to depth. A simple linear regression had depth as an estimate value of -0.4376 with a p-value of < 2.2x10-16. This shows a decline trend in meat weight with an increase in depth. However, the R2 of the simple linear regression was 14.55% which means that there are other import factors causing the variation in meat weight. 
+
+Table 1 shows all the GLMMS created with different variables and their AIC values. The single variable that caused the sharpest drop in AIC was shell height. This makes sense as the shell height acts as a proxy of age for bivalves. It also controls the total interior volume available for the animal. These facets make shell height the primary variable controlling the meat weight for sea scallops. Another interesting finding in the table is that when only accounting for single variables latitude performs better than color. However, when combined with shell height as an additional variable in the model color has a lower AIC than both shell height combined models with latitude and depth. This suggests that color is a bad individual predictor for meat weight but when combined with additional variables it performs better than others. This dynamic might be explained by the rare occurrence of discoloring in a scallop. With only 28 discolored scallops the ability to accurately predict the rest of the 4648 meat weights with only an intercept does not produce reasonable predictions. However, discoloring does highly affect overall meat weight of affected scallops so when used with a variable like shell height that can predict accurate meat weight for unaffected scallops the addition of color deals better for the 28 discolored scallops. 
+
+The final model that was selected by having the lowest AIC value was the full model with all the variables Shell Height, Season, Depth, Color, Lat. Since the model with all the variables was selected that shows that all the variables have a significant role in determining the meat weight for scallops. Shell height had a positive parameter with a value of `r round(summary(fits[[16]])$coefficients[2,1], digits = 2)` showing that increasing shell height correlates with larger meat weights. Season was made into dummy variables where summer has a value of 0, fall was -0.2, winter -0.16, and spring was -0.08. These values mean that summer has larger meat weights, and the other seasons have smaller meat weights. There is a large difference between fall and winter with both summer and spring. The reason for this difference has been explained by the spawning and food availability throughout the seasons. Depth had a negative parameter of `r round(summary(fits[[16]])$coefficients[6,1], digits = 2)` suggesting that meat weights get smaller the deeper scallops live. Previous research has suggested that this negative relationship could be caused by the lack of zooplankton and detritus as depth increases. Color also had a significant positive relationship on meat weight. In the model, discolored meats have a value of 0 while the value of white colored meats are `r round(summary(fits[[16]])$coefficients[7,1], digits = 2)`. This means that white meats have an additional `r round(summary(fits[[16]])$coefficients[7,1], digits = 2)` added to their meats or what is most likely happen is that discolored meats are causing a -`r round(summary(fits[[16]])$coefficients[7,1], digits = 2)` in meat weight. This can be explained by meat discoloring caused by pathogen infections that reduce the amount of energy that scallops can direct towards somatic growth. The last variable in the final model was latitude which had a value of `r round(summary(fits[[16]])$coefficients[8,1], digits = 2)`. This positive relationship with latitude shows that scallops living at higher latitude have larger meat weights. The cause of this could be multifold but is most likely explained but oceanographic conditions on Georges Bank that are causing uneven spatial availability of zooplankton and detritus.
+
+The combined effects of all the variables in the final model can be seen in figure 5. It shows predictions of shell height meat weight curves from the final model. Multiple stations were used to show the impacts of different depths and latitudes affected the curves. Stations 734 and 730 are located at the same latitude 41.16⁰N but their depths are 90m and 60m. While station 704 is located at a lower latitude of 40.77⁰N and a depth of 90m. The first thing that stands out in figure 5 is the different curves for each season with summer having the highest predicted meat weights and then a steady decline at each season. This shows that scallops’ meat weights change dynamically throughout the year rather than increasing continuously. The impact of discoloration is also clearly visible with a roughly 15g decrease in predicted meat weight for a 160mm shell height scallop. Comparing 730 with 704 shows the effect that a 30m depth increase causes on predicted meat weight. For a 160mm shell height scallop that difference is ~10g which can cause a massive impact on fishing yield. The difference between stations 704 and 734 is the impact of latitude on predicted meat weight. Latitude causes a smaller difference in meat weight than the other variables, but it is still noticeable. Understanding the variables that impact the meat weight of scallops will allow for better management of the resource.
+
+```{r fig 1, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 1: A scattor plot of Atlantic sea scallops(n = 4676) shell height to meat weight relationship. Data points were jittered so that overlapping points can be seen. A linear regression line is plotted in blue as well. Shell heigh was a significant predictor, p-value of < 2.2x10-16, and had a value of 0.64 showing a positive relationship."}
+dat %>% 
+  ggplot(aes(x = Shell_Height, y = Meat_Weight)) +
+  geom_jitter() +
+  theme_bw() +
+  labs(y = "Meat Weight (g)", x = "Shell Height (mm)") +
+  geom_smooth(method = lm, se = FALSE)
+```
+
+```{r fig 2, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 2: Comparison of meat weight for Atlanic sea scallops with white meats (n = 4648) and discolored meats (n = 28). The black line is the median while the top and bottom are 75 and 25 percentile. The whiskers are 1.5 * IQR and the points are data points outside that range. A Wilcox test, with a p-value of 0.00342, showed that there is a significant difference between meat weights."}
+dat %>% 
+  ggplot(aes(x = Color, y = Meat_Weight)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(y = "Meat Weight (g)", x = "Color")
+```
+
+```{r fig 3, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 3: Comparison of meat weights for Atlantic sea scallops for Summer (n = 1299), Fall (n = 973), Winter (n = 1204), and Spring (n = 1200). The black line is the median while the top and bottom are 75 and 25 percentile. The whiskers are 1.5 * IQR and the points are data points outside that range. A Kruskal test was preformed, p-value of < 2.2x10-16, and showed a significant difference in meat weight between the seasons."}
+ggplot(dat, aes(x = factor(Season, levels = c("Summer", "Fall", "Winter", "Spring")), y = Meat_Weight)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(y = "Meat Weight (g)", x = "Season")
+```
+
+```{r fig 4, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 4: A scattor plot of Atlantic sea scallops(n = 4676) depth to meat weight relationship. The range for station depths were 54m to 97m. Data points were jittered so that overlapping points can be seen. A linear regression line is plotted in blue as well. Depth was a significant predictor, p-value of < 2.2x10-16, and had a value of -0.43576 showing a positive relationship."}
+dat %>% 
+  ggplot(aes(x = Depth, y = Meat_Weight)) +
+  geom_jitter() +
+  theme_bw() +
+  labs(y = "Meat Weight (g)", x = "Depth") +
+  geom_smooth(method = lm, se = FALSE)
+```
+
+```{r fig 5, echo=FALSE, warning=FALSE, message=FALSE, fig.cap="Figure 5: Precticted shell hieght meat weight curves from the final selected model. Depth and latitude is varietied by the three different stations with 704 being 40.77⁰N and 90m, 730 being 41.16⁰N 60m, 734 being 41.16⁰N and 90m. Season was also included by different color curves for each station and meat color have diferent plots."}
+newdat %>% 
+  ggplot() +
+  geom_line(aes(x = Shell, y = MW, group = Season, color = Season)) +
+  facet_grid(cols = vars(Station), rows = vars(Color)) +
+  labs(x = "Shell Height (mm)", y = "Predicted Meat Weight (g)", 
+       title = "Precticted Meat Weight from Selected GLMM") +
+  scale_color_viridis(discrete = TRUE) +
+  theme_bw()
+```
+
+```{r table 1, echo=FALSE, warning=FALSE, message=FALSE}
+aictab(cand.set = fits, modnames = Model_names, sort = TRUE, second.ord = FALSE) %>% 
+  kable(caption = "Table 1: Model Selection by AIC for the GLMMs created to predict meat weight") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
